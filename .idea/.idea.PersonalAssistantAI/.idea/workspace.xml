@@ -9,7 +9,7 @@
   <component name="ChangeListManager">
     <list default="true" id="ab83f0d5-dc41-4a6e-8d57-8c9427a302ac" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.PersonalAssistantAI/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.PersonalAssistantAI/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Services/ChatService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Services/ChatService.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Program.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Program.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
