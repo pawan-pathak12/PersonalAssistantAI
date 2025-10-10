@@ -11,9 +11,10 @@ public static class ChatService
 
     public static async Task StartChat(Kernel kernel)
     {
-        var chatHistory = new ChatHistory();
-        chatHistory.AddSystemMessage(
-            @"Yoy are helpful Personal Assistant build to 
+        var (history, isNewConversation) = FileService.LoadConversation();
+        if (isNewConversation)
+            history.AddSystemMessage(
+                @"Yoy are helpful Personal Assistant build to 
                     response all user question in simple way");
 
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
@@ -23,7 +24,8 @@ public static class ChatService
         {
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
-        await ChatLoop(chatCompletionService, chatHistory, openAiPromptExecutionSettings, kernel);
+        await ChatLoop(chatCompletionService, history, openAiPromptExecutionSettings, kernel);
+        FileService.SaveConversation(history);
     }
 
     private static async Task ChatLoop(IChatCompletionService chatCompletionService, ChatHistory history,

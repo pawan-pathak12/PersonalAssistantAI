@@ -1,0 +1,26 @@
+﻿using System.Text.Json;
+using Microsoft.SemanticKernel.ChatCompletion;
+
+namespace PersonalAssistantAI.Services;
+
+public static class FileService
+{
+    private static readonly string HistoryFile = "chat_history.json";
+
+    public static void SaveConversation(ChatHistory history)
+    {
+        var json = JsonSerializer.Serialize(history, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(HistoryFile, json);
+        Console.WriteLine($"💾 Conversation saved ({history.Count} messages)");
+    }
+
+    public static (ChatHistory history, bool isNew) LoadConversation()
+    {
+        if (!File.Exists(HistoryFile))
+            return (new ChatHistory(), true); // New conversation
+
+        var json = File.ReadAllText(HistoryFile);
+        var history = JsonSerializer.Deserialize<ChatHistory>(json) ?? new ChatHistory();
+        return (history, false); // Existing conversation
+    }
+}
