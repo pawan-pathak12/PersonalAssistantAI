@@ -1,9 +1,26 @@
-﻿namespace PersonalAssistantAI;
+﻿using Microsoft.SemanticKernel;
+using PersonalAssistantAI.Services;
 
-class Program
+namespace PersonalAssistantAI;
+
+public class Program
 {
-    static void Main(string[] args)
+    public static async Task Main()
     {
-        Console.WriteLine("Hello, World!");
+        var builder = Kernel.CreateBuilder();
+
+        #region Connection to Ollama
+
+        builder.AddOpenAIChatCompletion(
+            "qwen2.5:7b",
+            "not-needed",
+            httpClient: new HttpClient
+            {
+                BaseAddress = new Uri("http://localhost:11434/v1")
+            });
+        var kernel = builder.Build();
+        await ChatService.StartChat(kernel);
+
+        #endregion
     }
 }
