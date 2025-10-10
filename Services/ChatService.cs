@@ -7,6 +7,8 @@ namespace PersonalAssistantAI.Services;
 
 public static class ChatService
 {
+    private static int emptyInputCount;
+
     public static async Task StartChat(Kernel kernel)
     {
         var chatHistory = new ChatHistory();
@@ -21,44 +23,79 @@ public static class ChatService
         {
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
+        await ChatLoop(chatCompletionService, chatHistory, openAiPromptExecutionSettings, kernel);
+    }
+
+    private static async Task ChatLoop(IChatCompletionService chatCompletionService, ChatHistory history,
+        OpenAIPromptExecutionSettings executionSettings, Kernel kernel)
+    {
         while (true)
-        {
-            Console.WriteLine();
-            Console.Write("User >");
-            var userMessage = Console.ReadLine()!;
-
-            if (userMessage.ToLower() == "exit" || userMessage.ToLower() == "quit")
+            try
             {
-                Console.WriteLine("exiting...");
-                break;
-            }
+                Console.WriteLine();
+                Console.Write("User >");
+                var userMessage = Console.ReadLine()!;
 
-            chatHistory.AddUserMessage(userMessage);
-            //get response from AI
-            var result = chatCompletionService.GetStreamingChatMessageContentsAsync(chatHistory,
-                openAiPromptExecutionSettings,
-                kernel);
+                #region Input Validation
 
-            //stream the result
-            var fullmessageBUilder = new StringBuilder();
-            var first = true;
-            await foreach (var context in result)
-            {
-                if (context.Role.HasValue && first)
+                if (emptyInputCount >= 3)
                 {
-                    Console.Write("Personal Assistant >");
-                    first = false;
+                    Console.WriteLine("Invalid Input , exiting......");
+                    break;
                 }
 
-                Console.Write(context.Content);
-                fullmessageBUilder.Append(context.Content);
+                if (string.IsNullOrWhiteSpace(userMessage))
+                {
+                    Console.WriteLine("Please enter a valid message");
+                    emptyInputCount++;
+                    continue;
+                }
+
+                if (userMessage.ToLower() == "exit" || userMessage.ToLower() == "quit")
+                {
+                    Console.WriteLine("exting ....");
+                    break;
+                }
+
+                #endregion
+
+                //Add to history 
+                history.AddUserMessage(userMessage);
+
+                //get response from AI
+                var result =
+                    chatCompletionService.GetStreamingChatMessageContentsAsync(history, executionSettings, kernel);
+                // Display response
+                await DisplayResponse(history, result);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
+    }
+
+    private static async Task DisplayResponse(ChatHistory chatHistory,
+        IAsyncEnumerable<StreamingChatMessageContent> result)
+    {
+        //stream the result
+        var fullmessageBUilder = new StringBuilder();
+        var first = true;
+        await foreach (var context in result)
+        {
+            if (context.Role.HasValue && first)
+            {
+                Console.Write("Personal Assistant >");
+                first = false;
             }
 
-            Console.WriteLine();
-            var fullMessage = fullmessageBUilder.ToString();
-            //Add the message to the chat history
-            chatHistory.AddAssistantMessage(fullMessage);
+            Console.Write(context.Content);
+            fullmessageBUilder.Append(context.Content);
         }
+
+        Console.WriteLine();
+        var fullMessage = fullmessageBUilder.ToString();
+        //Add the message to the chat history
+        chatHistory.AddAssistantMessage(fullMessage);
     }
-    
 }
