@@ -76,7 +76,7 @@ public static class ChatService
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                Console.WriteLine("Sorry, something went wrong. Please try again.");
                 throw;
             }
     }
@@ -104,4 +104,5 @@ public static class ChatService
         //Add the message to the chat history
         chatHistory.AddAssistantMessage(fullMessage);
     }
+    
 }

@@ -26,26 +26,6 @@ public class PersonalAssistantAgent
     public async Task<string> ProcessAsync(string userMessage)
     {
         //Detect commands here 
-        if (userMessage.ToLower().Contains("remind"))
-        {
-        }
-
-        if (userMessage.ToLower().Contains("note"))
-        {
-        }
-
-        if (userMessage.ToLower().Contains("remember"))
-        {
-        }
-
-        if (userMessage.ToLower().Contains("what time"))
-        {
-        }
-
-        if (userMessage.ToLower().Contains("Calculate"))
-        {
-        }
-
         _chatHistory.AddUserMessage(userMessage);
         var response = await _ChatCompletionService.GetChatMessageContentAsync(_chatHistory);
         _chatHistory.AddAssistantMessage(response.Content);
