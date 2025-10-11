@@ -9,13 +9,21 @@
   <component name="ChangeListManager">
     <list default="true" id="ab83f0d5-dc41-4a6e-8d57-8c9427a302ac" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.PersonalAssistantAI/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.PersonalAssistantAI/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Agents/PersonalAssistantAgent.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Agents/PersonalAssistantAgent.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/PersonalAssistantAI.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/PersonalAssistantAI.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Services/ChatService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Services/ChatService.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Services/FileService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Services/FileService.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="JSON File" />
+      </list>
+    </option>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -34,6 +42,8 @@
 }</component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$PROJECT_DIR$/Agents/PersonalAssistantAgent.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/Models/TaskItem.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/Plugins/TaskPlugin.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/Services/ChatService.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/Services/FileService.cs" root0="FORCE_HIGHLIGHTING" />
   </component>
