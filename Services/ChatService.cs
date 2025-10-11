@@ -2,6 +2,7 @@
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using PersonalAssistantAI.Agents;
 
 namespace PersonalAssistantAI.Services;
 
@@ -12,6 +13,9 @@ public static class ChatService
     public static async Task StartChat(Kernel kernel)
     {
         var (history, isNewConversation) = FileService.LoadConversation();
+
+        var personalAgent = new PersonalAssistantAgent(kernel);
+        Console.WriteLine("Hey , I am your Personal Agent ");
         if (isNewConversation)
             history.AddSystemMessage(
                 @"Yoy are helpful Personal Assistant build to 
@@ -24,12 +28,11 @@ public static class ChatService
         {
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
-        await ChatLoop(chatCompletionService, history, openAiPromptExecutionSettings, kernel);
+        await ChatLoop(history, personalAgent);
         FileService.SaveConversation(history);
     }
 
-    private static async Task ChatLoop(IChatCompletionService chatCompletionService, ChatHistory history,
-        OpenAIPromptExecutionSettings executionSettings, Kernel kernel)
+    private static async Task ChatLoop(ChatHistory history, PersonalAssistantAgent agent)
     {
         while (true)
             try
@@ -64,11 +67,12 @@ public static class ChatService
                 //Add to history 
                 history.AddUserMessage(userMessage);
 
+                var response = await agent.ProcessAsync(userMessage);
                 //get response from AI
-                var result =
-                    chatCompletionService.GetStreamingChatMessageContentsAsync(history, executionSettings, kernel);
+
                 // Display response
-                await DisplayResponse(history, result);
+                Console.WriteLine($"Personal Assistant > {response}");
+                history.AddAssistantMessage(response);
             }
             catch (Exception e)
             {
