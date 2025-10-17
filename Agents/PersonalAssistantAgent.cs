@@ -12,8 +12,8 @@ public class PersonalAssistantAgent
     {
         _ChatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
         _chatHistory = new ChatHistory();
-        
-       _chatHistory.AddSystemMessage(@"
+
+        _chatHistory.AddSystemMessage(@"
         You are a helpful Personal Assistant with access to tools.
 
         AVAILABLE TOOLS:
@@ -29,7 +29,7 @@ public class PersonalAssistantAgent
 
         FAILURE to actually call tools will result in incorrect responses.
         ");
-           
+
     }
 
     public async Task<string> ProcessAsync(string userMessage)
