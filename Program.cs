@@ -1,4 +1,5 @@
 ﻿using Microsoft.SemanticKernel;
+using PersonalAssistantAI.Plugin;
 using PersonalAssistantAI.Services;
 
 namespace PersonalAssistantAI;
@@ -22,8 +23,9 @@ public class Program
 
         #endregion
 
+        builder.Plugins.AddFromType<CalculatorPlugin>();
         Console.WriteLine("=================================");
-        Console.WriteLine("🤖 PERSONAL ASSISTANT AI");
+        Console.WriteLine(" PERSONAL ASSISTANT AI");
         Console.WriteLine("=================================");
         Console.WriteLine("1. Start Chat");
         Console.WriteLine("2. Exit");

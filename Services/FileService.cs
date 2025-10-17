@@ -1,5 +1,5 @@
-﻿using System.Text.Json;
-using Microsoft.SemanticKernel.ChatCompletion;
+﻿using Microsoft.SemanticKernel.ChatCompletion;
+using System.Text.Json;
 
 namespace PersonalAssistantAI.Services;
 
@@ -11,7 +11,7 @@ public static class FileService
     {
         var json = JsonSerializer.Serialize(history, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(HistoryFile, json);
-        Console.WriteLine($"💾 Conversation saved ({history.Count} messages)");
+        Console.WriteLine($" Conversation saved ({history.Count} messages)");
     }
 
     public static (ChatHistory history, bool isNew) LoadConversation()

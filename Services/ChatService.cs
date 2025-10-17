@@ -1,51 +1,66 @@
-﻿using System.Text;
-using Microsoft.SemanticKernel;
+﻿using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
-using PersonalAssistantAI.Agents;
 
 namespace PersonalAssistantAI.Services;
 
 public static class ChatService
 {
+    #region ToDo
+    /*   CORE FEATURES:
+           //todo : implement Real Time System to give : Weather Plugin
+           //todo : implement Real Time System to give : Time Plugin
+           //todo : implement Real Time System to give : News Plugin (RSS feeds)
+           //todo : implement Real Time System to give : Currency Converter Plugin
+           //todo : implement Real Time System to give : Unit Converter Plugin
+    */
+    #endregion
+
+    #region Start Chat Method
     private static int emptyInputCount;
 
     public static async Task StartChat(Kernel kernel)
     {
         var (history, isNewConversation) = FileService.LoadConversation();
 
-        var personalAgent = new PersonalAssistantAgent(kernel);
-        Console.WriteLine("Hey , I am your Personal Agent ");
+        Console.WriteLine("Hey, I am your Personal Agent");
+
         if (isNewConversation)
+        {
             history.AddSystemMessage(
-                @"Yoy are helpful Personal Assistant build to 
-                    response all user question in simple way");
+                @"You are helpful Personal Assistant built to 
+                  respond to all user questions in simple way");
+            Console.WriteLine($"Started new Conversation");
+        }
+        else
+        {
+            Console.WriteLine($"Loaded last Conversation with {history.Count} messages");
+        }
 
-        var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-
-        //auto function calling 
+        // Auto function calling 
         OpenAIPromptExecutionSettings openAiPromptExecutionSettings = new()
         {
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
-        await ChatLoop(history, personalAgent);
+
+        await ChatLoop(history, kernel, openAiPromptExecutionSettings);
         FileService.SaveConversation(history);
     }
 
-    private static async Task ChatLoop(ChatHistory history, PersonalAssistantAgent agent)
+    private static async Task ChatLoop(ChatHistory history, Kernel kernel, OpenAIPromptExecutionSettings executionSettings)
     {
         while (true)
+        {
             try
             {
                 Console.WriteLine();
-                Console.Write("User >");
+                Console.Write("User > ");
                 var userMessage = Console.ReadLine()!;
 
                 #region Input Validation
-
                 if (emptyInputCount >= 3)
                 {
-                    Console.WriteLine("Invalid Input , exiting......");
+                    Console.WriteLine("Invalid Input, exiting...");
                     break;
                 }
 
@@ -58,51 +73,69 @@ public static class ChatService
 
                 if (userMessage.ToLower() == "exit" || userMessage.ToLower() == "quit")
                 {
-                    Console.WriteLine("exting ....");
+                    Console.WriteLine("Exiting...");
                     break;
                 }
-
                 #endregion
 
-                //Add to history 
+                // Add to history 
                 history.AddUserMessage(userMessage);
 
-                var response = await agent.ProcessAsync(userMessage);
-                //get response from AI
+                var chatCompletion = kernel.GetRequiredService<IChatCompletionService>();
+                var response = await chatCompletion.GetChatMessageContentAsync(
+                    history,
+                    executionSettings: executionSettings, kernel
+                );
+
+                // Add response to history FIRST
+                history.AddAssistantMessage(response.Content);
 
                 // Display response
-                Console.WriteLine($"Personal Assistant > {response}");
-                history.AddAssistantMessage(response);
+                Console.ForegroundColor = ConsoleColor.Blue;
+                Console.Write($"Personal Assistant > ");
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine(response);
+
+                ManageConversation(history);
+                Console.ResetColor();
             }
             catch (Exception e)
             {
-                Console.WriteLine("Sorry, something went wrong. Please try again.");
-                throw;
+                Console.WriteLine($"Sorry, something went wrong: {e.Message}");
             }
-    }
-
-    private static async Task DisplayResponse(ChatHistory chatHistory,
-        IAsyncEnumerable<StreamingChatMessageContent> result)
-    {
-        //stream the result
-        var fullmessageBUilder = new StringBuilder();
-        var first = true;
-        await foreach (var context in result)
-        {
-            if (context.Role.HasValue && first)
-            {
-                Console.Write("Personal Assistant >");
-                first = false;
-            }
-
-            Console.Write(context.Content);
-            fullmessageBUilder.Append(context.Content);
         }
-
-        Console.WriteLine();
-        var fullMessage = fullmessageBUilder.ToString();
-        //Add the message to the chat history
-        chatHistory.AddAssistantMessage(fullMessage);
     }
-    
+    #endregion
+
+    #region Conversation Monitor
+    public static void ManageConversation(ChatHistory chatHistory)
+    {
+        if (chatHistory.Count > 100)
+        {
+            Console.WriteLine($"📝 Conversation getting long ({chatHistory.Count} messages).");
+            Console.Write("How many old messages to remove? (0 to keep all): ");
+
+            if (int.TryParse(Console.ReadLine(), out int messagesToRemove) && messagesToRemove > 0)
+            {
+                var systemMessage = chatHistory.FirstOrDefault(m => m.Role == AuthorRole.System);
+                var recentMessages = chatHistory.TakeLast(chatHistory.Count - messagesToRemove).ToList();
+
+                chatHistory.Clear();
+                if (systemMessage != null)
+                {
+                    chatHistory.Add(systemMessage);
+                }
+                foreach (var message in recentMessages)
+                {
+                    chatHistory.Add(message);
+                }
+                Console.WriteLine($"Removed {messagesToRemove} old messages. Now {chatHistory.Count} messages");
+            }
+            else
+            {
+                Console.WriteLine("Keeping all messages");
+            }
+        }
+    }
+    #endregion
 }
