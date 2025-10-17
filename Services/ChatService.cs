@@ -1,5 +1,4 @@
-﻿using System.Text;
-using Microsoft.SemanticKernel;
+﻿using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using PersonalAssistantAI.Agents;
@@ -8,6 +7,16 @@ namespace PersonalAssistantAI.Services;
 
 public static class ChatService
 {
+    /*   CORE FEATURES:
+           //todo : implement Real Time System to give : Weather Plugin
+           //todo : implement Real Time System to give : Time Plugin
+           //todo : implement Real Time System to give : News Plugin (RSS feeds)
+           //todo : implement Real Time System to give : Currency Converter Plugin
+           //todo : implement Real Time System to give : Unit Converter Plugin
+    */
+
+    #region  Start Chat Method
+
     private static int emptyInputCount;
 
     public static async Task StartChat(Kernel kernel)
@@ -21,7 +30,7 @@ public static class ChatService
                 @"Yoy are helpful Personal Assistant build to 
                     response all user question in simple way");
 
-        var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+        kernel.GetRequiredService<IChatCompletionService>();
 
         //auto function calling 
         OpenAIPromptExecutionSettings openAiPromptExecutionSettings = new()
@@ -69,10 +78,15 @@ public static class ChatService
 
                 var response = await agent.ProcessAsync(userMessage);
                 //get response from AI
-
+                Console.ForegroundColor = ConsoleColor.Blue;
                 // Display response
-                Console.WriteLine($"Personal Assistant > {response}");
+                Console.Write($"Personal Assistant > ");
+                ManageConversation(history);
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine(response);
+
                 history.AddAssistantMessage(response);
+                Console.ResetColor();
             }
             catch (Exception e)
             {
@@ -81,28 +95,44 @@ public static class ChatService
             }
     }
 
-    private static async Task DisplayResponse(ChatHistory chatHistory,
-        IAsyncEnumerable<StreamingChatMessageContent> result)
+    #endregion
+
+    #region Conversation Monitor
+    public static void ManageConversation(ChatHistory chatHistory)
     {
-        //stream the result
-        var fullmessageBUilder = new StringBuilder();
-        var first = true;
-        await foreach (var context in result)
+        if (chatHistory.Count > 20)
         {
-            if (context.Role.HasValue && first)
+
+            Console.WriteLine($"📝 Conversation getting long ({chatHistory.Count} messages).");
+            Console.Write("How many old messages to remove? (0 to keep all): ");
+
+            if (int.TryParse(Console.ReadLine(), out int messagesToRemove) && messagesToRemove > 0)
             {
-                Console.Write("Personal Assistant >");
-                first = false;
+                var systemMessage = chatHistory.FirstOrDefault(m => m.Role == AuthorRole.System);
+                var recentMessages = chatHistory.TakeLast(chatHistory.Count - messagesToRemove).ToList();
+
+                chatHistory.Clear();
+                if (systemMessage != null)
+                {
+                    chatHistory.Add(systemMessage);
+                }
+                foreach (var message in recentMessages)
+                {
+                    chatHistory.Add(message);
+
+                }
+                Console.WriteLine($"Removed {messagesToRemove} old Messages.Now {chatHistory.Count} messages ");
+            }
+            else
+            {
+                Console.WriteLine("Keeping all messages");
             }
 
-            Console.Write(context.Content);
-            fullmessageBUilder.Append(context.Content);
         }
-
-        Console.WriteLine();
-        var fullMessage = fullmessageBUilder.ToString();
-        //Add the message to the chat history
-        chatHistory.AddAssistantMessage(fullMessage);
     }
-    
+
+
+    #endregion
+
+
 }

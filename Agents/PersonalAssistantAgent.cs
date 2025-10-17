@@ -12,15 +12,24 @@ public class PersonalAssistantAgent
     {
         _ChatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
         _chatHistory = new ChatHistory();
-        _chatHistory.AddSystemMessage(@"
-        You are a helpful Personal Assistant that helps with:
-        - Task and reminder management
-        - Note taking and organization  
-        - Simple calculations and information
-        - General questions and assistance
+        
+       _chatHistory.AddSystemMessage(@"
+        You are a helpful Personal Assistant with access to tools.
 
-        Keep responses clear, concise, and actionable.
-        Use natural, friendly conversation.");
+        AVAILABLE TOOLS:
+        - TaskPlugin: AddTask, GetTasks, CompleteTask (for task management)
+        - CalculatorPlugin: Add, Subtract, Multiply, Divide (for calculations)
+
+        CRITICAL RULES:
+        1. You MUST ACTUALLY EXECUTE tools - NEVER simulate or pretend to use them
+        2. When user asks for calculations, ALWAYS call CalculatorPlugin
+        3. When user mentions tasks, ALWAYS call TaskPlugin  
+        4. Show tool calls but not  code to the user
+        5. Only show final results in natural language
+
+        FAILURE to actually call tools will result in incorrect responses.
+        ");
+           
     }
 
     public async Task<string> ProcessAsync(string userMessage)
