@@ -27,9 +27,17 @@ public static class ChatService
 
         if (isNewConversation)
         {
-            history.AddSystemMessage(
-                @"You are helpful Personal Assistant built to 
-                  respond to all user questions in simple way");
+            history.AddSystemMessage(@"You are a helpful AI personal assistant. 
+            Keep responses clear, concise, and friendly.
+            Answer questions directly without unnecessary details.
+            Use simple language that's easy to understand.
+
+            CRITICAL: For weather queries, ALWAYS call the actual WeatherRealTimePlugin.
+            NEVER use cached responses from conversation history.
+            ALWAYS fetch fresh data from the API.
+            ");
+
+            Console.WriteLine();
             Console.WriteLine($"Started new Conversation");
         }
         else
@@ -49,6 +57,7 @@ public static class ChatService
 
     private static async Task ChatLoop(ChatHistory history, Kernel kernel, OpenAIPromptExecutionSettings executionSettings)
     {
+        emptyInputCount = 0;
         while (true)
         {
             try
@@ -87,17 +96,20 @@ public static class ChatService
                     executionSettings: executionSettings, kernel
                 );
 
-                // Add response to history FIRST
-                history.AddAssistantMessage(response.Content);
-
-                // Display response
+                #region Display response
                 Console.ForegroundColor = ConsoleColor.Blue;
-                Console.Write($"Personal Assistant > ");
+                Console.Write($"\nPersonal Assistant > ");
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine(response);
 
-                ManageConversation(history);
                 Console.ResetColor();
+
+                #endregion
+                // Add response to history FIRST
+                history.AddAssistantMessage(response.Content);
+
+                ManageConversation(history);
+
             }
             catch (Exception e)
             {
