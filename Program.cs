@@ -8,6 +8,7 @@ CreateKernel();
 
 //plugin 
 kernel.Plugins.AddFromType<WeatherPlugin>();
+kernel.Plugins.AddFromType<TimePlugin>();
 
 
 await ChatService.StartChat(kernel);
@@ -27,6 +28,4 @@ static Kernel CreateKernel()
         .Build();
 }
 
-
 #endregion
-
