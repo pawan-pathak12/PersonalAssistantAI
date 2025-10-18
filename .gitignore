@@ -24,6 +24,7 @@ x86/
 # ASP.NET Core
 wwwroot/
 appsettings.Development.json
+appsettings.json
 appsettings.Local.json
 secrets.json
 

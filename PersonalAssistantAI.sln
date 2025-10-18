@@ -1,5 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36408.4 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PersonalAssistantAI", "PersonalAssistantAI.csproj", "{938DC207-9428-490F-8EA7-F86339A7AC2D}"
 EndProject
 Global
@@ -12,5 +15,11 @@ Global
 		{938DC207-9428-490F-8EA7-F86339A7AC2D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{938DC207-9428-490F-8EA7-F86339A7AC2D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{938DC207-9428-490F-8EA7-F86339A7AC2D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {EF855C67-81F3-4B5D-9DC9-1A77EE149691}
 	EndGlobalSection
 EndGlobal
