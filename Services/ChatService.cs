@@ -38,7 +38,7 @@ public static class ChatService
 
     /*   CORE FEATURES:
            //todo :done : implement Real Time System to give : Weather Plugin
-           //todo : implement Real Time System to give : Time Plugin
+           //todo :done : implement Real Time System to give : Time Plugin
            //todo : implement Real Time System to give : News Plugin (RSS feeds)
            //todo : implement Real Time System to give : Currency Converter Plugin
            //todo : implement Real Time System to give : Unit Converter Plugin
@@ -88,7 +88,7 @@ public static class ChatService
     }
 
     private static async Task ChatLoop(ChatHistory history, Kernel kernel,
-        OpenAIPromptExecutionSettings executionSettings)
+      OpenAIPromptExecutionSettings executionSettings)
     {
         emptyInputCount = 0;
         while (true)
@@ -121,7 +121,24 @@ public static class ChatService
 
                 #endregion
 
-                // Add to history 
+                // ---------- In ChatLoop (only the /pdf block) ----------
+                if (userMessage.StartsWith("/pdf ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var path = userMessage.Substring(5).Trim();
+                    var pdfText = PdfService.LoadOrCreatePdf(path);
+
+                    if (string.IsNullOrWhiteSpace(pdfText))
+                    {
+                        Console.WriteLine("PDF could not be loaded – skipping.");
+                        continue;
+                    }
+
+                    history.AddUserMessage($"Here is the content of the PDF file:\n{pdfText}");
+                    Console.WriteLine("PDF content loaded into chat context.");
+                    continue;
+                }
+
+                // Add to history
                 history.AddUserMessage(userMessage);
 
                 var chatCompletion = kernel.GetRequiredService<IChatCompletionService>();

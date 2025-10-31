@@ -12,6 +12,7 @@
       <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0-rc.2.25502.107" />
       <PackageReference Include="Microsoft.SemanticKernel" Version="1.66.0" />
       <PackageReference Include="Microsoft.SemanticKernel.Connectors.OpenAI" Version="1.66.0" />
+      <PackageReference Include="PdfPig" Version="0.1.11" />
     </ItemGroup>
 
     <ItemGroup>
