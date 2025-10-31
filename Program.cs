@@ -2,6 +2,8 @@
 using PersonalAssistantAI.Plugin;
 using PersonalAssistantAI.Services;
 
+
+
 // Setup Kernel
 var kernel = CreateKernel();
 CreateKernel();
@@ -9,7 +11,7 @@ CreateKernel();
 //plugin 
 kernel.Plugins.AddFromType<WeatherPlugin>();
 kernel.Plugins.AddFromType<TimePlugin>();
-
+kernel.Plugins.AddFromType<PdfPlugin>();
 
 await ChatService.StartChat(kernel);
 
