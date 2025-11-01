@@ -1,4 +1,5 @@
-﻿using Microsoft.SemanticKernel;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 
@@ -52,6 +53,19 @@ public static class ChatService
 
     public static async Task StartChat(Kernel kernel)
     {
+        // ---------- NEW: Load config ----------
+        var config = new ConfigurationBuilder()
+                        .SetBasePath(AppContext.BaseDirectory)
+                        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                        .Build();
+
+        var googleSection = config.GetSection("GoogleSearch");
+        var googleApiKey = googleSection["ApiKey"] ?? throw new InvalidOperationException("Google API key missing from appsettings.json");
+        var googleEngineId = googleSection["SearchEngineId"] ?? throw new InvalidOperationException("Google Search Engine ID missing from appsettings.json");
+
+        var webSearch = new WebSearchService(googleApiKey, googleEngineId);
+
+        // ---------- Your existing code ----------
         var (history, isNewConversation) = FileService.LoadConversation();
 
         Console.WriteLine("Hey, I am your Personal Agent");
@@ -59,15 +73,17 @@ public static class ChatService
         if (isNewConversation)
         {
             history.AddSystemMessage(@"You are a helpful AI personal assistant. 
-            Keep responses clear, concise, and friendly.
-            Answer questions directly without unnecessary details.
-            Use simple language that's easy to understand.
+        Keep responses clear, concise, and friendly.
+        Answer questions directly without unnecessary details.
+        Use simple language that's easy to understand.
 
-            CRITICAL: For weather queries, ALWAYS call the actual WeatherRealTimePlugin,
-            for time queries , always call the actual TimePlugin.
-            NEVER use cached responses from conversation history.
-            ALWAYS fetch fresh data from the API.
-            ");
+        CRITICAL: For weather queries, ALWAYS call the actual WeatherRealTimePlugin,
+        for time queries , always call the actual TimePlugin.
+        NEVER use cached responses from conversation history.
+        ALWAYS fetch fresh data from the API.
+f you don't know the answer or it's time-sensitive (news, facts, current events), 
+use the web search tool by responding with: [[SEARCH: your query here]]""
+        ");
 
             Console.WriteLine();
             Console.WriteLine("Started new Conversation");
@@ -83,14 +99,16 @@ public static class ChatService
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
 
-        await ChatLoop(history, kernel, openAiPromptExecutionSettings);
+        // ---------- Pass webSearch to ChatLoop ----------
+        await ChatLoop(history, kernel, openAiPromptExecutionSettings, webSearch);
         FileService.SaveConversation(history);
     }
 
+    // ---------- Updated signature ----------
     private static async Task ChatLoop(ChatHistory history, Kernel kernel,
-      OpenAIPromptExecutionSettings executionSettings)
+        OpenAIPromptExecutionSettings executionSettings, WebSearchService webSearch)
     {
-        emptyInputCount = 0;
+        int emptyInputCount = 0;  // Assuming this is defined elsewhere; if not, add it here
         while (true)
             try
             {
@@ -99,7 +117,6 @@ public static class ChatService
                 var userMessage = Console.ReadLine()!;
 
                 #region Input Validation
-
                 if (emptyInputCount >= 3)
                 {
                     Console.WriteLine("Invalid Input, exiting...");
@@ -118,10 +135,10 @@ public static class ChatService
                     Console.WriteLine("Exiting...");
                     break;
                 }
-
                 #endregion
 
-                // ---------- In ChatLoop (only the /pdf block) ----------
+                #region PDF reader Code 
+                // ---------- Your existing /pdf block ----------
                 if (userMessage.StartsWith("/pdf ", StringComparison.OrdinalIgnoreCase))
                 {
                     var path = userMessage.Substring(5).Trim();
@@ -137,8 +154,36 @@ public static class ChatService
                     Console.WriteLine("PDF content loaded into chat context.");
                     continue;
                 }
+                #endregion
 
-                // Add to history
+                #region Google Search Code 
+                // ---------- NEW: /search block ----------
+                if (userMessage.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var query = userMessage.Substring(8).Trim();
+                    if (string.IsNullOrWhiteSpace(query))
+                    {
+                        Console.WriteLine("Please provide a search query after /search");
+                        continue;
+                    }
+
+                    Console.WriteLine("🔍 Searching the web...");
+                    var results = await webSearch.SearchAsync(query);
+
+                    if (results.StartsWith("Search error:"))
+                    {
+                        Console.WriteLine(results);
+                        continue;
+                    }
+
+                    history.AddUserMessage($"Here are the top web search results for '{query}':\n{results}");
+                    Console.WriteLine("✅ Web search results loaded into chat context.");
+                    continue;  // Skip AI call for the command
+                }
+
+                #endregion
+
+                // ---------- Your existing chat logic ----------
                 history.AddUserMessage(userMessage);
 
                 var chatCompletion = kernel.GetRequiredService<IChatCompletionService>();
@@ -148,19 +193,14 @@ public static class ChatService
                 );
 
                 #region Display response
-
                 Console.ForegroundColor = ConsoleColor.Blue;
                 Console.Write("\nPersonal Assistant > ");
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine(response);
-
                 Console.ResetColor();
-
                 #endregion
 
-                // Add response to history FIRST
                 history.AddAssistantMessage(response.Content);
-
                 ManageConversation(history);
             }
             catch (Exception e)
