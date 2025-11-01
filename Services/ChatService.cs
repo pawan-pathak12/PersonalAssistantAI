@@ -47,45 +47,39 @@ public static class ChatService
 
     #endregion
 
-    #region Start Chat Method
-
-    private static int emptyInputCount;
-
     public static async Task StartChat(Kernel kernel)
     {
-        // ---------- NEW: Load config ----------
+        #region Load configuration (Google Search)
         var config = new ConfigurationBuilder()
                         .SetBasePath(AppContext.BaseDirectory)
                         .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                         .Build();
 
-        var googleSection = config.GetSection("GoogleSearch");
-        var googleApiKey = googleSection["ApiKey"] ?? throw new InvalidOperationException("Google API key missing from appsettings.json");
-        var googleEngineId = googleSection["SearchEngineId"] ?? throw new InvalidOperationException("Google Search Engine ID missing from appsettings.json");
+        var google = config.GetSection("GoogleSearch");
+        var apiKey = google["ApiKey"] ?? throw new InvalidOperationException("Google API key missing");
+        var engineId = google["SearchEngineId"] ?? throw new InvalidOperationException("Search engine ID missing");
+        #endregion
 
-        var webSearch = new WebSearchService(googleApiKey, googleEngineId);
+        var webSearch = new WebSearchService(apiKey, engineId);
 
-        // ---------- Your existing code ----------
-        var (history, isNewConversation) = FileService.LoadConversation();
+        var (history, isNew) = FileService.LoadConversation();
 
         Console.WriteLine("Hey, I am your Personal Agent");
 
-        if (isNewConversation)
+        if (isNew)
         {
             history.AddSystemMessage(@"You are a helpful AI personal assistant. 
-        Keep responses clear, concise, and friendly.
-        Answer questions directly without unnecessary details.
-        Use simple language that's easy to understand.
+            Keep responses clear, concise, and friendly.
+            Answer questions directly without unnecessary details.
+            Use simple language that's easy to understand.
 
-        CRITICAL: For weather queries, ALWAYS call the actual WeatherRealTimePlugin,
-        for time queries , always call the actual TimePlugin.
-        NEVER use cached responses from conversation history.
-        ALWAYS fetch fresh data from the API.
-f you don't know the answer or it's time-sensitive (news, facts, current events), 
-use the web search tool by responding with: [[SEARCH: your query here]]""
-        ");
+            CRITICAL: For weather queries, ALWAYS call the actual WeatherRealTimePlugin,
+            for time queries, always call the actual TimePlugin.
+            NEVER use cached responses from conversation history.
+            ALWAYS fetch fresh data from the API.
 
-            Console.WriteLine();
+            If you don't know the answer or it's time-sensitive (news, facts, current events), 
+            use the web search tool by responding with: [[SEARCH: your query here]]");
             Console.WriteLine("Started new Conversation");
         }
         else
@@ -93,121 +87,123 @@ use the web search tool by responding with: [[SEARCH: your query here]]""
             Console.WriteLine($"Loaded last Conversation with {history.Count} messages");
         }
 
-        // Auto function calling 
-        OpenAIPromptExecutionSettings openAiPromptExecutionSettings = new()
+        var execSettings = new OpenAIPromptExecutionSettings
         {
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
 
-        // ---------- Pass webSearch to ChatLoop ----------
-        await ChatLoop(history, kernel, openAiPromptExecutionSettings, webSearch);
+        // ---------- Voice ----------
+        var cts = new CancellationTokenSource();
+        var voice = new VoiceInputService(text =>
+            _ = ProcessMessageAsync(text, history, kernel, execSettings, webSearch, cts.Token));
+
+        voice.Start();
+        Console.WriteLine("Voice input ON (speak, pause to send)");
+        Console.WriteLine("Press V to toggle voice | Q to quit");
+
+        // ---------- Keyboard loop ----------
+        await ChatLoop(history, kernel, execSettings, webSearch, voice, cts.Token);
+
+        // ---------- Clean-up ----------
+        voice.Stop();
         FileService.SaveConversation(history);
     }
 
-    // ---------- Updated signature ----------
-    private static async Task ChatLoop(ChatHistory history, Kernel kernel,
-        OpenAIPromptExecutionSettings executionSettings, WebSearchService webSearch)
+    private static async Task ChatLoop(
+        ChatHistory history,
+        Kernel kernel,
+        OpenAIPromptExecutionSettings exec,
+        WebSearchService webSearch,
+        VoiceInputService voice,
+        CancellationToken ct)
     {
-        int emptyInputCount = 0;  // Assuming this is defined elsewhere; if not, add it here
-        while (true)
-            try
+        int empty = 0;
+
+        while (!ct.IsCancellationRequested)
+        {
+            Console.WriteLine();
+            Console.Write("User > ");
+            var input = Console.ReadLine()!.Trim();
+
+            if (string.IsNullOrWhiteSpace(input))
             {
-                Console.WriteLine();
-                Console.Write("User > ");
-                var userMessage = Console.ReadLine()!;
-
-                #region Input Validation
-                if (emptyInputCount >= 3)
-                {
-                    Console.WriteLine("Invalid Input, exiting...");
-                    break;
-                }
-
-                if (string.IsNullOrWhiteSpace(userMessage))
-                {
-                    Console.WriteLine("Please enter a valid message");
-                    emptyInputCount++;
-                    continue;
-                }
-
-                if (userMessage.ToLower() == "exit" || userMessage.ToLower() == "quit")
-                {
-                    Console.WriteLine("Exiting...");
-                    break;
-                }
-                #endregion
-
-                #region PDF reader Code 
-                // ---------- Your existing /pdf block ----------
-                if (userMessage.StartsWith("/pdf ", StringComparison.OrdinalIgnoreCase))
-                {
-                    var path = userMessage.Substring(5).Trim();
-                    var pdfText = PdfService.LoadOrCreatePdf(path);
-
-                    if (string.IsNullOrWhiteSpace(pdfText))
-                    {
-                        Console.WriteLine("PDF could not be loaded – skipping.");
-                        continue;
-                    }
-
-                    history.AddUserMessage($"Here is the content of the PDF file:\n{pdfText}");
-                    Console.WriteLine("PDF content loaded into chat context.");
-                    continue;
-                }
-                #endregion
-
-                #region Google Search Code 
-                // ---------- NEW: /search block ----------
-                if (userMessage.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
-                {
-                    var query = userMessage.Substring(8).Trim();
-                    if (string.IsNullOrWhiteSpace(query))
-                    {
-                        Console.WriteLine("Please provide a search query after /search");
-                        continue;
-                    }
-
-                    Console.WriteLine("🔍 Searching the web...");
-                    var results = await webSearch.SearchAsync(query);
-
-                    if (results.StartsWith("Search error:"))
-                    {
-                        Console.WriteLine(results);
-                        continue;
-                    }
-
-                    history.AddUserMessage($"Here are the top web search results for '{query}':\n{results}");
-                    Console.WriteLine("✅ Web search results loaded into chat context.");
-                    continue;  // Skip AI call for the command
-                }
-
-                #endregion
-
-                // ---------- Your existing chat logic ----------
-                history.AddUserMessage(userMessage);
-
-                var chatCompletion = kernel.GetRequiredService<IChatCompletionService>();
-                var response = await chatCompletion.GetChatMessageContentAsync(
-                    history,
-                    executionSettings, kernel
-                );
-
-                #region Display response
-                Console.ForegroundColor = ConsoleColor.Blue;
-                Console.Write("\nPersonal Assistant > ");
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine(response);
-                Console.ResetColor();
-                #endregion
-
-                history.AddAssistantMessage(response.Content);
-                ManageConversation(history);
+                if (++empty >= 3) { Console.WriteLine("Too many empty lines – exiting."); break; }
+                Console.WriteLine("Please type or speak something.");
+                continue;
             }
-            catch (Exception e)
+
+            empty = 0;
+
+            if (input.Equals("exit", StringComparison.OrdinalIgnoreCase) ||
+                input.Equals("quit", StringComparison.OrdinalIgnoreCase))
+                break;
+
+            // ----- toggle voice -----
+            if (input.Equals("v", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine($"Sorry, something went wrong: {e.Message}");
+                if (voice.IsListening) { voice.Stop(); Console.WriteLine("Voice OFF – press V to turn on"); }
+                else { voice.Start(); Console.WriteLine("Voice ON"); }
+                continue;
             }
+
+            await ProcessMessageAsync(input, history, kernel, exec, webSearch, ct);
+        }
     }
 
-    #endregion
+    // -------------------------------------------------
+    // 3. SINGLE MESSAGE PROCESSOR – used by BOTH keyboard & voice
+    // -------------------------------------------------
+    private static async Task ProcessMessageAsync(
+        string userMessage,
+        ChatHistory history,
+        Kernel kernel,
+        OpenAIPromptExecutionSettings exec,
+        WebSearchService webSearch,
+        CancellationToken ct)
+    {
+        // ----- /pdf -----
+        if (userMessage.StartsWith("/pdf ", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = userMessage.Substring(5).Trim();
+            var pdf = PdfService.LoadOrCreatePdf(path);
+            if (string.IsNullOrWhiteSpace(pdf))
+            {
+                Console.WriteLine("PDF could not be loaded.");
+                return;
+            }
+            history.AddUserMessage($"[PDF] {Path.GetFileName(path)}\n{pdf}");
+            Console.WriteLine("PDF loaded into context.");
+            return;
+        }
+
+        // ----- /search -----
+        if (userMessage.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
+        {
+            var q = userMessage.Substring(8).Trim();
+            if (string.IsNullOrWhiteSpace(q)) { Console.WriteLine("Add a query after /search"); return; }
+
+            Console.WriteLine("Searching web…");
+            var results = await webSearch.SearchAsync(q);
+            if (results.StartsWith("Search error:")) { Console.WriteLine(results); return; }
+
+            history.AddUserMessage($"Web results for \"{q}\":\n{results}");
+            Console.WriteLine("Web results added to context.");
+            return;
+        }
+
+        // ----- Normal AI chat -----
+        history.AddUserMessage(userMessage);
+
+        var chat = kernel.GetRequiredService<IChatCompletionService>();
+        var answer = await chat.GetChatMessageContentAsync(history, exec, kernel);
+
+        Console.ForegroundColor = ConsoleColor.Blue;
+        Console.Write("\nPersonal Assistant > ");
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine(answer);
+        Console.ResetColor();
+
+        history.AddAssistantMessage(answer.Content);
+        ManageConversation(history);
+    }
 }
