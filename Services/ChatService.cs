@@ -92,20 +92,11 @@ public static class ChatService
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
 
-        // ---------- Voice ----------
-        var cts = new CancellationTokenSource();
-        var voice = new VoiceInputService(text =>
-            _ = ProcessMessageAsync(text, history, kernel, execSettings, webSearch, cts.Token));
-
-        voice.Start();
-        Console.WriteLine("Voice input ON (speak, pause to send)");
-        Console.WriteLine("Press V to toggle voice | Q to quit");
-
         // ---------- Keyboard loop ----------
-        await ChatLoop(history, kernel, execSettings, webSearch, voice, cts.Token);
+        await ChatLoop(history, kernel, execSettings, webSearch);
 
         // ---------- Clean-up ----------
-        voice.Stop();
+
         FileService.SaveConversation(history);
     }
 
@@ -113,13 +104,11 @@ public static class ChatService
         ChatHistory history,
         Kernel kernel,
         OpenAIPromptExecutionSettings exec,
-        WebSearchService webSearch,
-        VoiceInputService voice,
-        CancellationToken ct)
+        WebSearchService webSearch)
     {
         int empty = 0;
 
-        while (!ct.IsCancellationRequested)
+        while (true)
         {
             Console.WriteLine();
             Console.Write("User > ");
@@ -139,14 +128,9 @@ public static class ChatService
                 break;
 
             // ----- toggle voice -----
-            if (input.Equals("v", StringComparison.OrdinalIgnoreCase))
-            {
-                if (voice.IsListening) { voice.Stop(); Console.WriteLine("Voice OFF – press V to turn on"); }
-                else { voice.Start(); Console.WriteLine("Voice ON"); }
-                continue;
-            }
 
-            await ProcessMessageAsync(input, history, kernel, exec, webSearch, ct);
+
+            await ProcessMessageAsync(input, history, kernel, exec, webSearch);
         }
     }
 
@@ -158,8 +142,7 @@ public static class ChatService
         ChatHistory history,
         Kernel kernel,
         OpenAIPromptExecutionSettings exec,
-        WebSearchService webSearch,
-        CancellationToken ct)
+        WebSearchService webSearch)
     {
         // ----- /pdf -----
         if (userMessage.StartsWith("/pdf ", StringComparison.OrdinalIgnoreCase))
