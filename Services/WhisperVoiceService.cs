@@ -22,7 +22,7 @@ public class WhisperVoiceService
         if (_isRecording) return;
         _isRecording = true;
 
-        Console.Write("Listening (3 sec)... ");
+        Console.Write("Listening ( sec)... ");
 
         try
         {
@@ -30,7 +30,7 @@ public class WhisperVoiceService
             var ffmpeg = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-f dshow -i audio=\"Microphone Array (Intel® Smart Sound Technology for Digital Microphones)\" -t 3 -y \"{_tempWav}\"",
+                Arguments = $"-f dshow -i audio=\"Microphone Array (Intel® Smart Sound Technology for Digital Microphones)\" -t 5 -y \"{_tempWav}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
