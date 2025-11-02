@@ -1,6 +1,7 @@
 ﻿using Microsoft.SemanticKernel;
 using PersonalAssistantAI.Plugin;
 using PersonalAssistantAI.Services;
+using System.Speech.Synthesis;
 
 
 
@@ -14,6 +15,7 @@ kernel.Plugins.AddFromType<TimePlugin>();
 kernel.Plugins.AddFromType<PdfPlugin>();
 
 await ChatService.StartChat(kernel);
+//TestTTS();
 
 #region Connection to Ollama
 
@@ -30,4 +32,26 @@ static Kernel CreateKernel()
         .Build();
 }
 
+#endregion
+
+# region ai voice test 
+static void TestTTS()
+{
+    try
+    {
+        var synthesizer = new SpeechSynthesizer();
+        Console.WriteLine("Available Voices:");
+        foreach (var voice in synthesizer.GetInstalledVoices())
+        {
+            Console.WriteLine($"- {voice.VoiceInfo.Name}");
+        }
+
+        Console.WriteLine("Testing TTS...");
+        synthesizer.Speak("JARVIS is now active");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"TTS Error: {ex.Message}");
+    }
+}
 #endregion
