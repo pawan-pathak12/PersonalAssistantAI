@@ -117,7 +117,7 @@ public static class ChatService
         });
 
         whisper.StartOneShot();
-        Console.WriteLine("Voice ON (speak → auto-submit after 5 sec)");
+        Console.WriteLine("Voice ON (speak → auto-submit after 10 sec)");
         Console.WriteLine("Type 'q' to quit");
         #endregion
 
@@ -141,7 +141,7 @@ public static class ChatService
             if (!whisper.IsRecording)
             {
                 Console.WriteLine();
-                Console.Write("User > ");
+
                 var input = Console.ReadLine()!.Trim();
 
                 if (string.IsNullOrWhiteSpace(input))
@@ -165,6 +165,7 @@ public static class ChatService
             else
             {
                 await Task.Delay(100);
+                continue;
             }
         }
     }
