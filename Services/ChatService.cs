@@ -66,6 +66,7 @@ public static class ChatService
 
         Console.WriteLine("Hey, I am your Personal Agent");
 
+        #region Prompt to AI 
         if (isNew)
         {
             history.AddSystemMessage(@"You are a helpful AI personal assistant. 
@@ -82,6 +83,7 @@ public static class ChatService
             use the web search tool by responding with: [[SEARCH: your query here]]");
             Console.WriteLine("Started new Conversation");
         }
+        #endregion
         else
         {
             Console.WriteLine($"Loaded last Conversation with {history.Count} messages");
@@ -92,59 +94,76 @@ public static class ChatService
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
 
-        // ---------- Keyboard loop ----------
-        await ChatLoop(history, kernel, execSettings, webSearch);
+        #region  ---------- Whisper Voice ----------
+        WhisperVoiceService? whisper = null;  // ← Declare first
 
-        // ---------- Clean-up ----------
+        whisper = new WhisperVoiceService(async text =>
+        {
+            if (whisper != null)
+            {
+                await ProcessMessageAsync(text, history, kernel, execSettings, webSearch, whisper);
+            }
+        });
+
+        whisper.StartOneShot();
+        Console.WriteLine("Voice ON (speak → auto-submit after 3 sec)");
+        Console.WriteLine("Type 'q' to quit");
+        #endregion
+
+        await ChatLoop(history, kernel, execSettings, webSearch, whisper);
+
 
         FileService.SaveConversation(history);
     }
 
     private static async Task ChatLoop(
-        ChatHistory history,
-        Kernel kernel,
-        OpenAIPromptExecutionSettings exec,
-        WebSearchService webSearch)
+     ChatHistory history,
+     Kernel kernel,
+     OpenAIPromptExecutionSettings exec,
+     WebSearchService webSearch,
+     WhisperVoiceService whisper)
     {
         int empty = 0;
 
         while (true)
         {
-            Console.WriteLine();
-            Console.Write("User > ");
-            var input = Console.ReadLine()!.Trim();
-
-            if (string.IsNullOrWhiteSpace(input))
+            if (!whisper.IsRecording)
             {
-                if (++empty >= 3) { Console.WriteLine("Too many empty lines – exiting."); break; }
-                Console.WriteLine("Please type or speak something.");
-                continue;
+                Console.WriteLine();
+                Console.Write("User > ");
+                var input = Console.ReadLine()!.Trim();
+
+                if (string.IsNullOrWhiteSpace(input))
+                {
+                    if (++empty >= 3) break;
+                    Console.WriteLine("Type or wait for voice...");
+                    continue;
+                }
+
+                empty = 0;
+
+                // Voice is always ON — no V needed
+                // Remove this block completely
+
+                if (input.Equals("q", StringComparison.OrdinalIgnoreCase) ||
+                    input.Equals("quit", StringComparison.OrdinalIgnoreCase))
+                    break;
+
+                await ProcessMessageAsync(input, history, kernel, exec, webSearch, whisper);
             }
-
-            empty = 0;
-
-            if (input.Equals("exit", StringComparison.OrdinalIgnoreCase) ||
-                input.Equals("quit", StringComparison.OrdinalIgnoreCase))
-                break;
-
-            // ----- toggle voice -----
-
-
-            await ProcessMessageAsync(input, history, kernel, exec, webSearch);
+            else
+            {
+                await Task.Delay(100);
+            }
         }
     }
 
-    // -------------------------------------------------
-    // 3. SINGLE MESSAGE PROCESSOR – used by BOTH keyboard & voice
-    // -------------------------------------------------
-    private static async Task ProcessMessageAsync(
-        string userMessage,
-        ChatHistory history,
-        Kernel kernel,
-        OpenAIPromptExecutionSettings exec,
-        WebSearchService webSearch)
+
+    private static async Task ProcessMessageAsync(string userMessage, ChatHistory history,
+        Kernel kernel, OpenAIPromptExecutionSettings exec, WebSearchService webSearch, WhisperVoiceService whisper)
     {
-        // ----- /pdf -----
+
+        #region  ----- /pdf -----
         if (userMessage.StartsWith("/pdf ", StringComparison.OrdinalIgnoreCase))
         {
             var path = userMessage.Substring(5).Trim();
@@ -158,8 +177,9 @@ public static class ChatService
             Console.WriteLine("PDF loaded into context.");
             return;
         }
+        #endregion
 
-        // ----- /search -----
+        #region  // ----- /search -----
         if (userMessage.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
         {
             var q = userMessage.Substring(8).Trim();
@@ -173,6 +193,8 @@ public static class ChatService
             Console.WriteLine("Web results added to context.");
             return;
         }
+
+        #endregion
 
         // ----- Normal AI chat -----
         history.AddUserMessage(userMessage);
@@ -188,5 +210,7 @@ public static class ChatService
 
         history.AddAssistantMessage(answer.Content);
         ManageConversation(history);
+        whisper.StartOneShot();
     }
 }
+
