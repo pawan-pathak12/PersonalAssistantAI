@@ -8,48 +8,43 @@ namespace PersonalAssistantAI.Services
     {
         private readonly string _whisperPath = @"C:\whisper\Release\whisper-cli.exe";
         private readonly string _modelPath = @"C:\whisper\models\ggml-tiny.en.bin";
-        private readonly Action<string> _onFinalText;
 
-        // Mic
+        private readonly Func<string, Task> _onFinalText;
+        private readonly Action? _onBargeIn; // NEW
+
         private WaveInEvent? _waveIn;
-
-        // VAD/state
         private volatile bool _listening;
         private volatile bool _inSpeech;
         private DateTime _speechStartUtc;
         private DateTime _lastVoiceUtc;
         private MemoryStream? _currentUtterance;
 
-        // VAD params (tune these if needed)
-        private const double VadThresholdRms = 0.02;          // 0..1 normalized RMS threshold
+        private const double VadThresholdRms = 0.02;
         private static readonly TimeSpan SilenceHangover = TimeSpan.FromMilliseconds(450);
         private static readonly TimeSpan MinUtterance = TimeSpan.FromMilliseconds(350);
         private static readonly TimeSpan MaxUtterance = TimeSpan.FromSeconds(15);
 
-        // Buffering/queue
         private readonly ConcurrentQueue<byte[]> _segments = new();
         private readonly SemaphoreSlim _segmentSignal = new(0);
         private CancellationTokenSource? _cts;
         private Task? _workerTask;
 
-        public NAudioVoiceService(Action<string> onFinalText)
+        public NAudioVoiceService(Func<string, Task> onFinalText, Action? onBargeIn = null)
         {
             _onFinalText = onFinalText;
+            _onBargeIn = onBargeIn;
         }
 
-        public void Start(int deviceNumber = -1) // -1 = default device
+        public void Start(int deviceNumber = -1)
         {
             if (_listening) return;
 
-            // Optional: list devices for debugging
-            //    LogDevices();
 
             _waveIn = new WaveInEvent
             {
                 DeviceNumber = deviceNumber,
-                // 16 kHz mono 16-bit is ideal for Whisper
                 WaveFormat = new WaveFormat(16000, 16, 1),
-                BufferMilliseconds = 50 // ~50ms chunks
+                BufferMilliseconds = 50
             };
             _waveIn.DataAvailable += OnDataAvailable;
             _waveIn.RecordingStopped += OnRecordingStopped;
@@ -75,7 +70,7 @@ namespace PersonalAssistantAI.Services
             _waveIn = null;
 
             _cts?.Cancel();
-            try { _workerTask?.Wait(1000); } catch { /* ignore */ }
+            try { _workerTask?.Wait(1000); } catch { }
             _workerTask = null;
             _cts?.Dispose();
             _cts = null;
@@ -85,33 +80,28 @@ namespace PersonalAssistantAI.Services
         {
             if (!_listening || e.BytesRecorded <= 0) return;
 
-            // Compute RMS of this buffer (16-bit PCM)
             double rms = ComputeRms16(e.Buffer, e.BytesRecorded);
-
             var now = DateTime.UtcNow;
 
-            // Speech start condition
+            // Speech start
             if (!_inSpeech && rms >= VadThresholdRms)
             {
                 _inSpeech = true;
                 _speechStartUtc = now;
                 _lastVoiceUtc = now;
-                _currentUtterance = new MemoryStream(capacity: e.BytesRecorded * 8); // pre-allocate a bit
-                                                                                     // Optional: a small pre-roll could be added here if you keep a tiny ring buffer
-                Console.WriteLine(" Speech detected: recording …");
+                _currentUtterance = new MemoryStream(capacity: e.BytesRecorded * 8);
+
+                // NEW: barge-in callback (stop TTS immediately)
+                try { _onBargeIn?.Invoke(); } catch { /* ignore */ }
+
+                Console.WriteLine(" Speech detected: recording utterance…");
             }
 
-            // If currently in speech, append audio
             if (_inSpeech && _currentUtterance != null)
             {
                 _currentUtterance.Write(e.Buffer, 0, e.BytesRecorded);
+                if (rms >= VadThresholdRms) _lastVoiceUtc = now;
 
-                if (rms >= VadThresholdRms)
-                {
-                    _lastVoiceUtc = now;
-                }
-
-                // End conditions
                 var speechDuration = now - _speechStartUtc;
                 var silenceDuration = now - _lastVoiceUtc;
 
@@ -120,22 +110,16 @@ namespace PersonalAssistantAI.Services
                     FinishUtterance(now);
                 }
             }
-
-            // Optional: simple console VU meter (comment out if noisy)
-            // Console.Write("\rLevel: " + new string('#', Math.Min(30, (int)(rms * 300))) + "   ");
         }
 
         private void FinishUtterance(DateTime now)
         {
             _inSpeech = false;
 
-            if (_currentUtterance == null)
-                return;
+            if (_currentUtterance == null) return;
 
             var duration = now - _speechStartUtc;
-
-            // Keep only decent utterances
-            if (duration < MinUtterance || _currentUtterance.Length < 1600) // ~50ms of 16kHz mono 16-bit
+            if (duration < MinUtterance || _currentUtterance.Length < 1600)
             {
                 _currentUtterance.Dispose();
                 _currentUtterance = null;
@@ -156,14 +140,8 @@ namespace PersonalAssistantAI.Services
         {
             while (!ct.IsCancellationRequested)
             {
-                try
-                {
-                    await _segmentSignal.WaitAsync(ct);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
+                try { await _segmentSignal.WaitAsync(ct); }
+                catch (OperationCanceledException) { break; }
 
                 while (_segments.TryDequeue(out var pcm))
                 {
@@ -172,7 +150,6 @@ namespace PersonalAssistantAI.Services
                         var wavPath = Path.Combine(Path.GetTempPath(), $"jarvis_{Guid.NewGuid():N}.wav");
                         WriteWav16kMono(wavPath, pcm);
 
-                        // Whisper CLI call
                         var psi = new ProcessStartInfo
                         {
                             FileName = _whisperPath,
@@ -202,7 +179,7 @@ namespace PersonalAssistantAI.Services
                             Console.ForegroundColor = ConsoleColor.Green;
                             Console.WriteLine($"You said: {text}");
                             Console.ResetColor();
-                            _onFinalText(text);
+                            await _onFinalText(text); // async callback
                         }
                         else
                         {
@@ -219,7 +196,6 @@ namespace PersonalAssistantAI.Services
 
         private static double ComputeRms16(byte[] buffer, int bytes)
         {
-            // 16-bit signed PCM mono
             int samples = bytes / 2;
             if (samples == 0) return 0;
 
@@ -257,9 +233,9 @@ namespace PersonalAssistantAI.Services
             else
                 Console.WriteLine("Mic stopped.");
 
-            // Flush any active utterance if we were mid-speech
             if (_inSpeech) FinishUtterance(DateTime.UtcNow);
         }
+
 
 
 

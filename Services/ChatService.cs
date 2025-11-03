@@ -8,8 +8,6 @@ namespace PersonalAssistantAI.Services;
 
 public static class ChatService
 {
-
-
     #region New code 
     public static void ManageConversation(ChatHistory chatHistory)
     {
@@ -35,22 +33,9 @@ public static class ChatService
         }
     }
 
-
-    #region ToDo
-
-    /*   CORE FEATURES:
-           //todo :done : implement Real Time System to give : Weather Plugin
-           //todo :done : implement Real Time System to give : Time Plugin
-           //todo : implement Real Time System to give : News Plugin (RSS feeds)
-           //todo : implement Real Time System to give : Currency Converter Plugin
-           //todo : implement Real Time System to give : Unit Converter Plugin
-    */
-
-    #endregion
-
     public static async Task StartChat(Kernel kernel)
     {
-        #region Load configuration
+        // Load configuration
         var config = new ConfigurationBuilder()
                         .SetBasePath(AppContext.BaseDirectory)
                         .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -59,7 +44,6 @@ public static class ChatService
         var google = config.GetSection("GoogleSearch");
         var apiKey = google["ApiKey"] ?? throw new InvalidOperationException("Google API key missing");
         var engineId = google["SearchEngineId"] ?? throw new InvalidOperationException("Search engine ID missing");
-        #endregion
 
         var webSearch = new WebSearchService(apiKey, engineId);
         kernel.Plugins.AddFromObject(new WebSearchPlugin(apiKey, engineId));
@@ -67,58 +51,60 @@ public static class ChatService
         var ttsService = new TextToSpeechService();
         var (history, isNew) = FileService.LoadConversation();
 
-        #region JARVIS Prompt
         if (isNew)
         {
             history.AddSystemMessage(@"You are JARVIS - Just A Rather Very Intelligent System.
-            Act as an advanced AI assistant with sophisticated, professional personality.
+                Act as an advanced AI assistant with sophisticated, professional personality.
 
-            PERSONALITY:
-            - Intelligent, analytical, and proactive
-            - Confident and precise in communication  
-            - Professional tone with subtle wit
-            - Address the user respectfully but naturally
+                PERSONALITY:
+                - Intelligent, analytical, and proactive
+                - Confident and precise in communication  
+                - Professional tone with subtle wit
+                - Address the user respectfully but naturally
 
-            RESPONSE STYLE:
-            - Concise but thorough in explanations
-            - Natural, flowing language - not robotic
-            - Add brief analytical insights when appropriate
-            - Break down complex topics clearly
+                RESPONSE STYLE:
+                - Concise but thorough in explanations
+                - Natural, flowing language - not robotic
+                - Add brief analytical insights when appropriate
+                - Break down complex topics clearly
 
-            CRITICAL FUNCTIONAL RULES:
-            - For weather queries, ALWAYS call the actual WeatherRealTimePlugin
-            - For time queries, always call the actual TimePlugin  
-            - NEVER use cached responses from conversation history
-            - ALWAYS fetch fresh data from the API
-            - For unknown/time-sensitive info, use web search via [[SEARCH: your query here]]
+                CRITICAL FUNCTIONAL RULES:
+                - For weather queries, ALWAYS call the actual WeatherRealTimePlugin
+                - For time queries, always call the actual TimePlugin  
+                - NEVER use cached responses from conversation history
+                - ALWAYS fetch fresh data from the API
+                - For unknown/time-sensitive info, use web search via [[SEARCH: your query here]]
 
-            Maintain this personality while following all functional rules above.");
+                Maintain this personality while following all functional rules above.");
             Console.WriteLine("Started new Conversation");
         }
         else
         {
             Console.WriteLine($"Loaded last Conversation with {history.Count} messages");
         }
-        #endregion
 
         var execSettings = new OpenAIPromptExecutionSettings
         {
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
 
-        // Always-listening NAudio voice service
-        using var voiceService = new NAudioVoiceService(async text =>
-        {
-            // Avoid feedback: ignore mic input while TTS is speaking
-            if (ttsService.IsSpeaking) return;
+        // Always-listening voice with barge-in
+        using var voiceService = new NAudioVoiceService(
+            onFinalText: async text =>
+            {
+                // Do NOT block on TTS state; barge-in will already have stopped TTS
+                await ProcessMessageAsync(text, history, kernel, execSettings, webSearch, ttsService);
+            },
+            onBargeIn: () =>
+            {
+                // Stop current TTS immediately when user starts speaking
+                if (ttsService.IsSpeaking) ttsService.Stop();
+            });
 
-            await ProcessMessageAsync(text, history, kernel, execSettings, webSearch, ttsService);
-        });
-
-        Console.WriteLine("🎤 Always-listening enabled (NAudio + VAD). Speak naturally.");
+        Console.WriteLine("🎤 Always-listening enabled (barge-in active). Speak naturally.");
         Console.WriteLine("Type 'q' to quit, 'voice' to toggle voice responses");
 
-        voiceService.Start(); // continuous listening
+        voiceService.Start();
 
         try
         {
@@ -144,39 +130,35 @@ public static class ChatService
         {
             try
             {
-                if (!ttsService.IsSpeaking)
+                Console.WriteLine();
+                Console.Write("User > ");
+                var input = Console.ReadLine()?.Trim() ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(input))
                 {
-                    Console.WriteLine();
-                    Console.Write("User > ");
-                    var input = Console.ReadLine()?.Trim() ?? string.Empty;
-
-                    if (string.IsNullOrWhiteSpace(input))
-                    {
-                        if (++empty >= 3) break;
-                        Console.WriteLine("Say something or type a message...");
-                        continue;
-                    }
-
-                    empty = 0;
-
-                    if (input.Equals("q", StringComparison.OrdinalIgnoreCase) ||
-                        input.Equals("quit", StringComparison.OrdinalIgnoreCase))
-                    {
-                        break;
-                    }
-
-                    if (input.Equals("voice", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ttsService.Toggle();
-                        continue;
-                    }
-
-                    await ProcessMessageAsync(input, history, kernel, exec, webSearch, ttsService);
+                    if (++empty >= 3) break;
+                    Console.WriteLine("Say something or type a message...");
+                    continue;
                 }
-                else
+
+                empty = 0;
+
+                if (input.Equals("q", StringComparison.OrdinalIgnoreCase) ||
+                    input.Equals("quit", StringComparison.OrdinalIgnoreCase))
                 {
-                    await Task.Delay(100); // wait while TTS is talking
+                    break;
                 }
+
+                if (input.Equals("voice", StringComparison.OrdinalIgnoreCase))
+                {
+                    ttsService.Toggle();
+                    continue;
+                }
+
+                // Barge-in for typed input: stop speaking immediately
+                if (ttsService.IsSpeaking) ttsService.Stop();
+
+                await ProcessMessageAsync(input, history, kernel, exec, webSearch, ttsService);
             }
             catch (Exception ex)
             {
@@ -193,7 +175,7 @@ public static class ChatService
         WebSearchService webSearch,
         TextToSpeechService ttsService)
     {
-        #region PDF Processing
+        // Optional commands
         if (userMessage.StartsWith("/pdf ", StringComparison.OrdinalIgnoreCase))
         {
             var path = userMessage.Substring(5).Trim();
@@ -207,9 +189,7 @@ public static class ChatService
             Console.WriteLine("PDF loaded into context.");
             return;
         }
-        #endregion
 
-        #region Web Search Command (optional)
         if (userMessage.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
         {
             var q = userMessage.Substring(8).Trim();
@@ -231,7 +211,6 @@ public static class ChatService
             Console.WriteLine("Web results added to context.");
             return;
         }
-        #endregion
 
         // Normal AI chat
         history.AddUserMessage(userMessage);
@@ -248,6 +227,7 @@ public static class ChatService
         history.AddAssistantMessage(answer.Content ?? string.Empty);
 
         var responseText = answer.Content ?? string.Empty;
+        // Speak (will be interrupted on barge-in)
         if (!responseText.Contains("Listening...", StringComparison.OrdinalIgnoreCase) &&
             !responseText.StartsWith("How can I assist you", StringComparison.OrdinalIgnoreCase))
         {
@@ -255,8 +235,7 @@ public static class ChatService
         }
 
         _ = Task.Run(() => ManageConversation(history));
-
-        await Task.Delay(300); // small delay to let TTS start
+        await Task.Delay(50);
     }
-    #endregion
 }
+#endregion
