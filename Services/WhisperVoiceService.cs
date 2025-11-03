@@ -1,4 +1,5 @@
 ﻿// Services/WhisperVoiceService.cs
+using NAudio.Wave;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
@@ -13,11 +14,20 @@ public class WhisperVoiceService
     private bool _isRecording = false;
     private readonly TextToSpeechService _ttsService;
 
+    #region NAudio
+    private WaveInEvent? _waveIn;
+    private WaveFileWriter? _waveWriter;
+    private readonly TimeSpan _silenceThreshold = TimeSpan.FromSeconds(1.5);
+    private DateTime _lastSoundTime;
+    #endregion
+
     public WhisperVoiceService(Action<string> onFinalText, TextToSpeechService ttsService)
     {
         _onFinalText = onFinalText;
         _ttsService = ttsService;
     }
+
+    #region old code 
 
     public async void StartOneShot()
     {
@@ -82,6 +92,10 @@ public class WhisperVoiceService
             _isRecording = false;
         }
     }
+
+    #endregion
+
+
     private string CleanOutput(string output)
     {
         return Regex.Replace(output, @"\[\d+:\d+:\d+\.\d+ -> \d+:\d+:\d+\.\d+\]\s*", "")

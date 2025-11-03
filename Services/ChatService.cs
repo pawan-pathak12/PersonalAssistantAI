@@ -2,6 +2,7 @@
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using PersonalAssistantAI.Plugin;
 
 namespace PersonalAssistantAI.Services;
 
@@ -61,10 +62,10 @@ public static class ChatService
         #endregion
 
         var webSearch = new WebSearchService(apiKey, engineId);
+
+        kernel.Plugins.AddFromObject(new WebSearchPlugin(apiKey, engineId));
         var ttsService = new TextToSpeechService();
         var (history, isNew) = FileService.LoadConversation();
-
-        Console.WriteLine("Hey, I am your Personal Agent");
 
         #region JARVIS Prompt
         if (isNew)
@@ -120,7 +121,7 @@ public static class ChatService
             }
         }, ttsService);
 
-        Console.WriteLine("🎤 Voice activated (speak now - 8 second recording)");
+        Console.WriteLine("🎤 Voice activated (speak now - 5 second recording)");
         Console.WriteLine("Type 'q' to quit, 'voice' to toggle voice responses");
         whisper.StartOneShot();
         #endregion
@@ -129,12 +130,8 @@ public static class ChatService
         FileService.SaveConversation(history);
     }
 
-    private static async Task ChatLoop(
-        ChatHistory history,
-        Kernel kernel,
-        OpenAIPromptExecutionSettings exec,
-        WebSearchService webSearch,
-        WhisperVoiceService whisper,
+    private static async Task ChatLoop(ChatHistory history, Kernel kernel,
+        OpenAIPromptExecutionSettings exec, WebSearchService webSearch, WhisperVoiceService whisper,
         TextToSpeechService ttsService)
     {
         int empty = 0;
@@ -189,14 +186,9 @@ public static class ChatService
         }
     }
 
-    private static async Task ProcessMessageAsync(
-        string userMessage,
-        ChatHistory history,
-        Kernel kernel,
-        OpenAIPromptExecutionSettings execSettings,
-        WebSearchService webSearch,
-        WhisperVoiceService whisper,
-        TextToSpeechService ttsService)
+    private static async Task ProcessMessageAsync(string userMessage, ChatHistory history,
+        Kernel kernel, OpenAIPromptExecutionSettings execSettings,
+        WebSearchService webSearch, WhisperVoiceService whisper, TextToSpeechService ttsService)
     {
         #region PDF Processing
         if (userMessage.StartsWith("/pdf ", StringComparison.OrdinalIgnoreCase))
@@ -217,32 +209,32 @@ public static class ChatService
         }
         #endregion
 
-        #region Web Search
-        if (userMessage.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
-        {
-            var q = userMessage.Substring(8).Trim();
-            if (string.IsNullOrWhiteSpace(q))
-            {
-                Console.WriteLine("Add a query after /search");
-                return;
-            }
+        /*       #region Web Search
+               if (userMessage.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
+               {
+                   var q = userMessage.Substring(8).Trim();
+                   if (string.IsNullOrWhiteSpace(q))
+                   {
+                       Console.WriteLine("Add a query after /search");
+                       return;
+                   }
 
-            Console.WriteLine("Searching web…");
-            var results = await webSearch.SearchAsync(q);
-            if (results.StartsWith("Search error:"))
-            {
-                Console.WriteLine(results);
-                return;
-            }
+                   Console.WriteLine("Searching web…");
+                   var results = await webSearch.SearchAsync(q);
+                   if (results.StartsWith("Search error:"))
+                   {
+                       Console.WriteLine(results);
+                       return;
+                   }
 
-            history.AddUserMessage($"Web results for \"{q}\":\n{results}");
-            Console.WriteLine("Web results added to context.");
+                   history.AddUserMessage($"Web results for \"{q}\":\n{results}");
+                   Console.WriteLine("Web results added to context.");
 
-            // Restart voice after search
-            whisper.StartOneShot();
-            return;
-        }
-        #endregion
+                   // Restart voice after search
+                   whisper.StartOneShot();
+                   return;
+               }
+               #endregion*/
 
         // Normal AI chat
         history.AddUserMessage(userMessage);
@@ -266,7 +258,7 @@ public static class ChatService
             ttsService.Speak(responseText);
         }
 
-        ManageConversation(history);
+        _ = Task.Run(() => ManageConversation(history));
 
         // Wait a moment for TTS to start, then check if we should restart voice
         await Task.Delay(500);

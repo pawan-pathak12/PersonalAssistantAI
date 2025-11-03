@@ -15,7 +15,10 @@ public class TextToSpeechService
         _synthesizer.SetOutputToDefaultAudioDevice();
 
         // Optional: Select a specific voice
-        // _synthesizer.SelectVoice("Microsoft David Desktop");
+        _synthesizer.SelectVoice("Microsoft David Desktop");
+        _synthesizer.Rate = 2;
+        _synthesizer.Volume = 95;
+
     }
 
     public void Speak(string text)
