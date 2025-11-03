@@ -209,32 +209,7 @@ public static class ChatService
         }
         #endregion
 
-        /*       #region Web Search
-               if (userMessage.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
-               {
-                   var q = userMessage.Substring(8).Trim();
-                   if (string.IsNullOrWhiteSpace(q))
-                   {
-                       Console.WriteLine("Add a query after /search");
-                       return;
-                   }
 
-                   Console.WriteLine("Searching web…");
-                   var results = await webSearch.SearchAsync(q);
-                   if (results.StartsWith("Search error:"))
-                   {
-                       Console.WriteLine(results);
-                       return;
-                   }
-
-                   history.AddUserMessage($"Web results for \"{q}\":\n{results}");
-                   Console.WriteLine("Web results added to context.");
-
-                   // Restart voice after search
-                   whisper.StartOneShot();
-                   return;
-               }
-               #endregion*/
 
         // Normal AI chat
         history.AddUserMessage(userMessage);

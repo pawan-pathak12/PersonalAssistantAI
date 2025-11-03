@@ -1,5 +1,4 @@
 ﻿// Services/WhisperVoiceService.cs
-using NAudio.Wave;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
@@ -14,12 +13,6 @@ public class WhisperVoiceService
     private bool _isRecording = false;
     private readonly TextToSpeechService _ttsService;
 
-    #region NAudio
-    private WaveInEvent? _waveIn;
-    private WaveFileWriter? _waveWriter;
-    private readonly TimeSpan _silenceThreshold = TimeSpan.FromSeconds(1.5);
-    private DateTime _lastSoundTime;
-    #endregion
 
     public WhisperVoiceService(Action<string> onFinalText, TextToSpeechService ttsService)
     {
@@ -27,7 +20,7 @@ public class WhisperVoiceService
         _ttsService = ttsService;
     }
 
-    #region old code 
+    #region Main code 
 
     public async void StartOneShot()
     {
