@@ -11,26 +11,31 @@ public class WhisperVoiceService
     private readonly string _tempWav = Path.Combine(Path.GetTempPath(), "voice_input.wav");
     private readonly Action<string> _onFinalText;
     private bool _isRecording = false;
+    private readonly TextToSpeechService _ttsService;
 
-    public WhisperVoiceService(Action<string> onFinalText)
+
+    public WhisperVoiceService(Action<string> onFinalText, TextToSpeechService ttsService)
     {
         _onFinalText = onFinalText;
+        _ttsService = ttsService;
     }
+
+    #region Main code 
 
     public async void StartOneShot()
     {
-        if (_isRecording) return;
+        if (_isRecording || _ttsService.IsSpeaking) return;
         _isRecording = true;
 
-        Console.Write("Listening (10 sec)... ");
+        Console.Write("Listening (5 sec)... ");
 
         try
         {
-            // Record 3 seconds
+            // Record audio FIRST
             var ffmpeg = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-f dshow -i audio=\"Microphone Array (Intel® Smart Sound Technology for Digital Microphones)\" -t 10 -y \"{_tempWav}\"",
+                Arguments = $"-f dshow -i audio=\"Microphone Array (Intel® Smart Sound Technology for Digital Microphones)\" -t 5 -y \"{_tempWav}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
@@ -52,7 +57,15 @@ public class WhisperVoiceService
             string output = await wp.StandardOutput.ReadToEndAsync();
             wp.WaitForExit();
 
+            // THEN process the output
             var text = CleanOutput(output);
+            if (string.IsNullOrWhiteSpace(text) || text.Length < 2)
+            {
+                Console.WriteLine("\rNo valid speech detected.");
+                // Don't call StartOneShot() here - let the callback handle restart
+                return;
+            }
+
             if (!string.IsNullOrWhiteSpace(text) && text.Length > 1)
             {
                 Console.WriteLine($"\rYou said: {text}          ");
@@ -70,9 +83,11 @@ public class WhisperVoiceService
         finally
         {
             _isRecording = false;
-            // NO AUTO-RESTART HERE — AI will call StartOneShot() after response
         }
     }
+
+    #endregion
+
 
     private string CleanOutput(string output)
     {

@@ -2,6 +2,7 @@
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using PersonalAssistantAI.Plugin;
 
 namespace PersonalAssistantAI.Services;
 
@@ -49,7 +50,7 @@ public static class ChatService
 
     public static async Task StartChat(Kernel kernel)
     {
-        #region Load configuration (Google Search)
+        #region Load configuration
         var config = new ConfigurationBuilder()
                         .SetBasePath(AppContext.BaseDirectory)
                         .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -62,39 +63,40 @@ public static class ChatService
 
         var webSearch = new WebSearchService(apiKey, engineId);
 
+        kernel.Plugins.AddFromObject(new WebSearchPlugin(apiKey, engineId));
+        var ttsService = new TextToSpeechService();
         var (history, isNew) = FileService.LoadConversation();
 
-        Console.WriteLine("Hey, I am your Personal Agent");
-
-        #region Prompt to AI 
+        #region JARVIS Prompt
         if (isNew)
         {
             history.AddSystemMessage(@"You are JARVIS - Just A Rather Very Intelligent System.
-        Act as an advanced AI assistant with sophisticated, professional personality.
+                Act as an advanced AI assistant with sophisticated, professional personality.
 
-        PERSONALITY:
-        - Intelligent, analytical, and proactive
-        - Confident and precise in communication  
-        - Professional tone with subtle wit
-        - Address the user respectfully but naturally
+                PERSONALITY:
+                - Intelligent, analytical, and proactive
+                - Confident and precise in communication  
+                - Professional tone with subtle wit
+                - Address the user respectfully but naturally
 
-        RESPONSE STYLE:
-        - Concise but thorough in explanations
-        - Natural, flowing language - not robotic
-        - Add brief analytical insights when appropriate
-        - Break down complex topics clearly
+                RESPONSE STYLE:
+                - Concise but thorough in explanations
+                - Natural, flowing language - not robotic
+                - Add brief analytical insights when appropriate
+                - Break down complex topics clearly
 
-        CRITICAL FUNCTIONAL RULES:
-        - For weather queries, ALWAYS call the actual WeatherRealTimePlugin
-        - For time queries, always call the actual TimePlugin  
-        - NEVER use cached responses from conversation history
-        - ALWAYS fetch fresh data from the API
-        - For unknown/time-sensitive info, use web search via [[SEARCH: your query here]]
+                CRITICAL FUNCTIONAL RULES:
+                - For weather queries, ALWAYS call the actual WeatherRealTimePlugin
+                - For time queries, always call the actual TimePlugin  
+                - NEVER use cached responses from conversation history
+                - ALWAYS fetch fresh data from the API
+                - For unknown/time-sensitive info, use web search via [[SEARCH: your query here]]
 
-        Maintain this personality while following all functional rules above.");
+                Maintain this personality while following all functional rules above.");
             Console.WriteLine("Started new Conversation");
         }
         #endregion
+
         else
         {
             Console.WriteLine($"Loaded last Conversation with {history.Count} messages");
@@ -105,77 +107,90 @@ public static class ChatService
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
         };
 
-        #region  ---------- Whisper Voice ----------
-        WhisperVoiceService? whisper = null;  // ← Declare first
+        #region Whisper Voice Service
+        WhisperVoiceService? whisper = null;
 
         whisper = new WhisperVoiceService(async text =>
         {
             if (whisper != null)
             {
-                await ProcessMessageAsync(text, history, kernel, execSettings, webSearch, whisper);
+                await ProcessMessageAsync(text, history, kernel, execSettings, webSearch, whisper, ttsService);
+                // Always restart after processing
+                // Wait for TTS to finish before restarting voice
+                await WaitForTTSFinish(ttsService, whisper);
             }
-        });
+        }, ttsService);
 
+        Console.WriteLine("🎤 Voice activated (speak now - 5 second recording)");
+        Console.WriteLine("Type 'q' to quit, 'voice' to toggle voice responses");
         whisper.StartOneShot();
-        Console.WriteLine("Voice ON (speak → auto-submit after 10 sec)");
-        Console.WriteLine("Type 'q' to quit");
         #endregion
 
-        await ChatLoop(history, kernel, execSettings, webSearch, whisper);
-
-
+        await ChatLoop(history, kernel, execSettings, webSearch, whisper, ttsService);
         FileService.SaveConversation(history);
     }
 
-    private static async Task ChatLoop(
-     ChatHistory history,
-     Kernel kernel,
-     OpenAIPromptExecutionSettings exec,
-     WebSearchService webSearch,
-     WhisperVoiceService whisper)
+    private static async Task ChatLoop(ChatHistory history, Kernel kernel,
+        OpenAIPromptExecutionSettings exec, WebSearchService webSearch, WhisperVoiceService whisper,
+        TextToSpeechService ttsService)
     {
         int empty = 0;
 
         while (true)
         {
-            if (!whisper.IsRecording)
+            try
             {
-                Console.WriteLine();
-
-                var input = Console.ReadLine()!.Trim();
-
-                if (string.IsNullOrWhiteSpace(input))
+                // Don't show prompt if TTS is speaking
+                if (!ttsService.IsSpeaking)
                 {
-                    if (++empty >= 3) break;
-                    Console.WriteLine("Type or wait for voice...");
-                    continue;
+                    Console.WriteLine();
+                    Console.Write("User > ");
+                    var input = Console.ReadLine()!.Trim();
+
+                    if (string.IsNullOrWhiteSpace(input))
+                    {
+                        if (++empty >= 3) break;
+                        Console.WriteLine("Type or wait for voice...");
+                        continue;
+                    }
+
+                    empty = 0;
+
+                    if (input.Equals("q", StringComparison.OrdinalIgnoreCase) ||
+                        input.Equals("quit", StringComparison.OrdinalIgnoreCase))
+                        break;
+
+                    // Add voice toggle command
+                    if (input.Equals("voice", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ttsService.Toggle();
+                        continue;
+                    }
+
+                    await ProcessMessageAsync(input, history, kernel, exec, webSearch, whisper, ttsService);
+                    // Wait for TTS to finish before restarting voice
+                    await WaitForTTSFinish(ttsService, whisper);
+
+
                 }
-
-                empty = 0;
-
-                // Voice is always ON — no V needed
-                // Remove this block completely
-
-                if (input.Equals("q", StringComparison.OrdinalIgnoreCase) ||
-                    input.Equals("quit", StringComparison.OrdinalIgnoreCase))
-                    break;
-
-                await ProcessMessageAsync(input, history, kernel, exec, webSearch, whisper);
+                else
+                {
+                    // Wait while TTS is speaking
+                    await Task.Delay(100);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                await Task.Delay(100);
-                continue;
+                Console.WriteLine($"Error in chat loop: {ex.Message}");
             }
         }
     }
 
-
     private static async Task ProcessMessageAsync(string userMessage, ChatHistory history,
-        Kernel kernel, OpenAIPromptExecutionSettings exec, WebSearchService webSearch, WhisperVoiceService whisper)
+        Kernel kernel, OpenAIPromptExecutionSettings execSettings,
+        WebSearchService webSearch, WhisperVoiceService whisper, TextToSpeechService ttsService)
     {
-
-        #region  ----- /pdf -----
+        #region PDF Processing
         if (userMessage.StartsWith("/pdf ", StringComparison.OrdinalIgnoreCase))
         {
             var path = userMessage.Substring(5).Trim();
@@ -187,32 +202,20 @@ public static class ChatService
             }
             history.AddUserMessage($"[PDF] {Path.GetFileName(path)}\n{pdf}");
             Console.WriteLine("PDF loaded into context.");
+
+            // Restart voice after PDF processing
+            whisper.StartOneShot();
             return;
         }
         #endregion
 
-        #region  // ----- /search -----
-        if (userMessage.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
-        {
-            var q = userMessage.Substring(8).Trim();
-            if (string.IsNullOrWhiteSpace(q)) { Console.WriteLine("Add a query after /search"); return; }
 
-            Console.WriteLine("Searching web…");
-            var results = await webSearch.SearchAsync(q);
-            if (results.StartsWith("Search error:")) { Console.WriteLine(results); return; }
 
-            history.AddUserMessage($"Web results for \"{q}\":\n{results}");
-            Console.WriteLine("Web results added to context.");
-            return;
-        }
-
-        #endregion
-
-        // ----- Normal AI chat -----
+        // Normal AI chat
         history.AddUserMessage(userMessage);
 
         var chat = kernel.GetRequiredService<IChatCompletionService>();
-        var answer = await chat.GetChatMessageContentAsync(history, exec, kernel);
+        var answer = await chat.GetChatMessageContentAsync(history, execSettings, kernel);
 
         Console.ForegroundColor = ConsoleColor.Blue;
         Console.Write("\nPersonal Assistant > ");
@@ -220,9 +223,38 @@ public static class ChatService
         Console.WriteLine(answer);
         Console.ResetColor();
 
-        history.AddAssistantMessage(answer.Content);
-        ManageConversation(history);
+        history.AddAssistantMessage(answer.Content ?? string.Empty);
+
+        // SPEAK THE RESPONSE (filter out listening prompts)
+        var responseText = answer.Content ?? string.Empty;
+        if (!responseText.Contains("Listening...") &&
+            !responseText.StartsWith("How can I assist you"))
+        {
+            ttsService.Speak(responseText);
+        }
+
+        _ = Task.Run(() => ManageConversation(history));
+
+        // Wait a moment for TTS to start, then check if we should restart voice
+        await Task.Delay(500);
+        if (!ttsService.IsSpeaking)
+        {
+            whisper.StartOneShot();
+        }
+    }
+
+    private static async Task WaitForTTSFinish(TextToSpeechService ttsService, WhisperVoiceService whisper)
+    {
+        // Wait until TTS is no longer speaking
+        while (ttsService.IsSpeaking)
+        {
+            await Task.Delay(100);
+        }
+
+        // Small delay to ensure TTS is completely finished
+        await Task.Delay(200);
+
+        // Now restart listening
         whisper.StartOneShot();
     }
 }
-
