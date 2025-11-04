@@ -76,6 +76,7 @@ namespace PersonalAssistantAI.Services.ChatService
 
             #region Voice input/output Always-listening voice with barge-in
             // Always-listening voice with barge-in
+
             using var voiceService = new NAudioVoiceService(
              onFinalText: async text =>
              {
@@ -99,7 +100,13 @@ namespace PersonalAssistantAI.Services.ChatService
                      return; // do not route to LLM while locked
                  }
                  #endregion
+                 if (ttsService.IsSpeaking) return;
+
+                 await ProcessMessageService.ProcessMessageAsync(text, history, kernel, execSettings, webSearch, ttsService);
+
              });
+
+
             #endregion
 
             Console.WriteLine(" Always-listening enabled (barge-in active). Speak naturally.");
