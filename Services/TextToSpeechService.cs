@@ -1,5 +1,4 @@
 ﻿using System.Speech.Synthesis;
-using System.Text.RegularExpressions;
 
 namespace PersonalAssistantAI.Services;
 
@@ -43,6 +42,11 @@ public class TextToSpeechService
             IsSpeaking = false; // ← ADD THIS
         }
     }
+    public void Stop()
+    {
+        try { _synthesizer.SpeakAsyncCancelAll(); } catch { /* ignore */ }
+        IsSpeaking = false;
+    }
 
     public void Toggle()
     {
@@ -64,22 +68,5 @@ public class TextToSpeechService
             .Replace("[[SEARCH:", "Searching for")
             .Replace("]]", "");
     }
-    private string CleanOutput(string output)
-    {
-        var cleaned = Regex.Replace(output, @"\[\d+:\d+:\d+\.\d+ -> \d+:\d+:\d+\.\d+\]\s*", "")
-                        .Replace("whisper", "")
-                        .Replace("model", "")
-                        .Trim();
 
-        // Filter out noise indicators
-        if (cleaned.Contains("[MUSIC") ||
-            cleaned.Contains("[BLANK") ||
-            cleaned.Contains("[NOISE") ||
-            cleaned.Length < 3) // Too short to be real speech
-        {
-            return string.Empty;
-        }
-
-        return cleaned;
-    }
 }
