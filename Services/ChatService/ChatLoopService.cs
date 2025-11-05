@@ -53,42 +53,52 @@ namespace PersonalAssistantAI.Services.ChatService
                 }
 
                 #endregion
+
                 try
                 {
-                    Console.WriteLine();
-                    Console.Write("User > ");
-                    var input = Console.ReadLine()?.Trim() ?? string.Empty;
-
-                    if (string.IsNullOrWhiteSpace(input))
+                    if (!ttsService.IsSpeaking)
                     {
-                        if (++empty >= 3) break;
-                        Console.WriteLine("Say something or type a message...");
-                        continue;
+                        Console.WriteLine();
+                        Console.Write("User > ");
+                        var input = Console.ReadLine()?.Trim() ?? string.Empty;
+
+                        if (string.IsNullOrWhiteSpace(input))
+                        {
+                            if (++empty >= 3) break;
+                            Console.WriteLine("Say something or type a message...");
+                            continue;
+                        }
+
+                        empty = 0;
+
+                        if (input.Equals("q", StringComparison.OrdinalIgnoreCase) ||
+                            input.Equals("quit", StringComparison.OrdinalIgnoreCase))
+                        {
+                            break;
+                        }
+
+                        if (input.Equals("voice", StringComparison.OrdinalIgnoreCase))
+                        {
+                            ttsService.Toggle();
+                            continue;
+                        }
+
+                        // Barge-in for typed input: stop speaking immediately
+                        if (ttsService.IsSpeaking) ttsService.Stop();
+
+                        await ProcessMessageService.ProcessMessageAsync(input, history, kernel, exec, webSearch, ttsService);
                     }
-
-                    empty = 0;
-
-                    if (input.Equals("q", StringComparison.OrdinalIgnoreCase) ||
-                        input.Equals("quit", StringComparison.OrdinalIgnoreCase))
+                    else
                     {
-                        break;
+                        await Task.Delay(100); // wait while TTS is 
                     }
-
-                    if (input.Equals("voice", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ttsService.Toggle();
-                        continue;
-                    }
-
-                    // Barge-in for typed input: stop speaking immediately
-                    if (ttsService.IsSpeaking) ttsService.Stop();
-
-                    await ProcessMessageService.ProcessMessageAsync(input, history, kernel, exec, webSearch, ttsService);
                 }
+
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error in chat loop: {ex.Message}");
                 }
+
             }
         }
 
