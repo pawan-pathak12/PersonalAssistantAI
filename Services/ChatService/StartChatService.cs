@@ -104,7 +104,7 @@ namespace PersonalAssistantAI.Services.ChatService
 
                  await ProcessMessageService.ProcessMessageAsync(text, history, kernel, execSettings, webSearch, ttsService);
 
-             });
+             }, ttsService);
 
 
             #endregion
